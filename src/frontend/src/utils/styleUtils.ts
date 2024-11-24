@@ -1,11 +1,15 @@
 import { AIMLIcon } from "@/icons/AIML";
 import { DuckDuckGoIcon } from "@/icons/DuckDuckGo";
 import { ExaIcon } from "@/icons/Exa";
+import { GleanIcon } from "@/icons/Glean";
 import { LangwatchIcon } from "@/icons/Langwatch";
 import { MilvusIcon } from "@/icons/Milvus";
 import Perplexity from "@/icons/Perplexity/Perplexity";
+import { SearchAPIIcon } from "@/icons/SearchAPI";
+import { SerpSearchIcon } from "@/icons/SerpSearch";
 import { TavilyIcon } from "@/icons/Tavily";
 import { UnstructuredIcon } from "@/icons/Unstructured";
+import { WikipediaIcon } from "@/icons/Wikipedia";
 import YouTubeIcon from "@/icons/Youtube/youtube";
 import { ZepMemoryIcon } from "@/icons/ZepMemory";
 import { AthenaIcon } from "@/icons/athena/index";
@@ -88,6 +92,7 @@ import {
   FolderIcon,
   FolderPlus,
   FolderPlusIcon,
+  FolderSync,
   FolderUp,
   FormInput,
   Forward,
@@ -265,6 +270,7 @@ import { Mem0 } from "../icons/Mem0";
 import { MetaIcon } from "../icons/Meta";
 import { MidjourneyIcon } from "../icons/Midjorney";
 import { MongoDBIcon } from "../icons/MongoDB";
+import { NotDiamondIcon } from "../icons/NotDiamond";
 import { NotionIcon } from "../icons/Notion";
 import { NvidiaIcon } from "../icons/Nvidia";
 import { OllamaIcon } from "../icons/Ollama";
@@ -503,6 +509,7 @@ export const SIDEBAR_BUNDLES = [
   { display_name: "Vectara", name: "vectara", icon: "Vectara" },
   { display_name: "Google", name: "google", icon: "Google" },
   { display_name: "CrewAI", name: "crewai", icon: "CrewAI" },
+  { display_name: "NotDiamond", name: "notdiamond", icon: "NotDiamond" },
   { display_name: "Composio", name: "composio", icon: "Composio" },
   { display_name: "Cohere", name: "cohere", icon: "Cohere" },
   { display_name: "Firecrawl", name: "firecrawl", icon: "FirecrawlCrawlApi" },
@@ -603,6 +610,7 @@ export const nodeIconsLucide: iconsType = {
   AstraDB: AstraDBIcon,
   BingSearchAPIWrapper: BingIcon,
   BingSearchRun: BingIcon,
+  Bing: BingIcon,
   Cohere: CohereIcon,
   ChevronsUpDownIcon,
   CohereEmbeddings: CohereIcon,
@@ -614,6 +622,8 @@ export const nodeIconsLucide: iconsType = {
   GoogleSearchAPIWrapper: GoogleIcon,
   GoogleSearchResults: GoogleIcon,
   GoogleSearchRun: GoogleIcon,
+  GoogleSearchAPI: GoogleIcon,
+  GoogleSerperAPI: GoogleIcon,
   Google: GoogleIcon,
   GoogleGenerativeAI: GoogleGenerativeAIIcon,
   Groq: GroqIcon,
@@ -626,6 +636,7 @@ export const nodeIconsLucide: iconsType = {
   HuggingFaceEmbeddings: HuggingFaceIcon,
   IFixitLoader: IFixIcon,
   CrewAI: CrewAiIcon,
+  NotDiamond: NotDiamondIcon,
   Composio: ComposioIcon,
   Meta: MetaIcon,
   Midjorney: MidjourneyIcon,
@@ -664,7 +675,6 @@ export const nodeIconsLucide: iconsType = {
   Discord: FaDiscord,
   MistralAI: MistralIcon,
   Upstash: UpstashSvgIcon,
-  PGVector: CpuIcon,
   Confluence: ConfluenceIcon,
   AIML: AIMLIcon,
   "AI/ML": AIMLIcon,
@@ -684,6 +694,11 @@ export const nodeIconsLucide: iconsType = {
   Langwatch: LangwatchIcon,
   Mem0,
   Tongyi: TongyiIcon,
+  Glean: GleanIcon,
+  GleanAPI: GleanIcon,
+  SerpSearch: SerpSearchIcon,
+  SearchAPI: SearchAPIIcon,
+  Wikipedia: WikipediaIcon,
 
   //Node Icons
   model_specs: FileSliders,
@@ -898,4 +913,5 @@ export const nodeIconsLucide: iconsType = {
   DatabaseZap,
   Cog,
   ArrowRightLeft,
+  FolderSync,
 };

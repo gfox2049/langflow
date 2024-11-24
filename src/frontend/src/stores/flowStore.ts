@@ -32,7 +32,6 @@ import { FlowStoreType, VertexLayerElementType } from "../types/zustand/flow";
 import { buildFlowVerticesWithFallback } from "../utils/buildUtils";
 import {
   checkChatInput,
-  checkOldComponents,
   cleanEdges,
   detectBrokenEdgesEdges,
   getHandleId,
@@ -278,6 +277,8 @@ const useFlowStore = create<FlowStoreType>((set, get) => ({
         return node;
       });
 
+      const newEdges = cleanEdges(newNodes, get().edges);
+
       if (callback) {
         // Defer the callback execution to ensure it runs after state updates are fully applied.
         queueMicrotask(callback);
@@ -286,6 +287,7 @@ const useFlowStore = create<FlowStoreType>((set, get) => ({
       return {
         ...state,
         nodes: newNodes,
+        edges: newEdges,
       };
     });
   },
@@ -347,14 +349,7 @@ const useFlowStore = create<FlowStoreType>((set, get) => ({
           selection.nodes.some((node) => edge.target === node.id),
       );
     }
-    if (selection.nodes) {
-      if (checkOldComponents({ nodes: selection.nodes ?? [] })) {
-        useAlertStore.getState().setNoticeData({
-          title:
-            "Components created before Langflow 1.0 may be unstable. Ensure components are up to date.",
-        });
-      }
-    }
+
     let minimumX = Infinity;
     let minimumY = Infinity;
     let idsMap = {};
