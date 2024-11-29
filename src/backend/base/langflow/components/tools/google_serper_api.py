@@ -1,18 +1,19 @@
-from langchain_community.utilities.google_serper import GoogleSerperAPIWrapper
+from typing import Any
+
 from langchain.tools import StructuredTool
+from langchain_community.utilities.google_serper import GoogleSerperAPIWrapper
+from pydantic import BaseModel, Field
 
 from langflow.base.langchain_utilities.model import LCToolComponent
 from langflow.field_typing import Tool
 from langflow.inputs import (
+    DictInput,
+    DropdownInput,
     IntInput,
     MultilineInput,
     SecretStrInput,
-    DictInput,
-    DropdownInput,
 )
 from langflow.schema import Data
-from pydantic import BaseModel, Field
-from typing import Any, Dict
 
 
 class GoogleSerperAPIComponent(LCToolComponent):
@@ -21,9 +22,7 @@ class GoogleSerperAPIComponent(LCToolComponent):
     name = "GoogleSerperAPI"
     icon = "Google"
     inputs = [
-        SecretStrInput(
-            name="serper_api_key", display_name="Serper API Key", required=True
-        ),
+        SecretStrInput(name="serper_api_key", display_name="Serper API Key", required=True),
         MultilineInput(
             name="query",
             display_name="Query",
@@ -55,9 +54,7 @@ class GoogleSerperAPIComponent(LCToolComponent):
             description="The type of search to perform (e.g., 'news' or 'search').",
         )
         k: int = Field(4, description="The number of results to return.")
-        query_params: Dict[str, Any] = Field(
-            {}, description="Additional query parameters to pass to the API."
-        )
+        query_params: dict[str, Any] = Field({}, description="Additional query parameters to pass to the API.")
 
     def run_model(self) -> Data | list[Data]:
         wrapper = self._build_wrapper(self.k, self.query_type, self.query_params)
@@ -71,14 +68,11 @@ class GoogleSerperAPIComponent(LCToolComponent):
         else:
             list_results = []
 
-        data = [
-            Data(data=result, text=result.get("snippet", "")) for result in list_results
-        ]
+        data = [Data(data=result, text=result.get("snippet", "")) for result in list_results]
         self.status = data
         return data
 
     def build_tool(self) -> Tool:
-
         return StructuredTool.from_function(
             name="google_search",
             description="Search Google for recent results.",
@@ -92,7 +86,6 @@ class GoogleSerperAPIComponent(LCToolComponent):
         query_type: str = "search",
         query_params: dict = {},
     ) -> GoogleSerperAPIWrapper:
-
         wrapper_args = {
             "serper_api_key": self.serper_api_key,
             "k": k,
