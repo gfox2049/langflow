@@ -164,7 +164,7 @@ class LCAgentComponent(Component):
                     version="v2",
                 ),
                 agent_message,
-                cast(SendMessageFunctionType, self.send_message),
+                cast(SendMessageFunctionType, self.asend_message),
             )
         except ExceptionWithMessageError as e:
             msg_id = e.agent_message.id

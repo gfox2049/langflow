@@ -1016,7 +1016,7 @@ class Component(CustomComponent):
                 )
             )
 
-    def send_message(self, message: Message, id_: str | None = None):
+    async def asend_message(self, message: Message, id_: str | None = None):
         if (hasattr(self, "graph") and self.graph.session_id) and (message is not None and not message.session_id):
             message.session_id = self.graph.session_id
         stored_message = self._store_message(message)
@@ -1029,18 +1029,21 @@ class Component(CustomComponent):
                 and message is not None
                 and isinstance(message.text, AsyncIterator | Iterator)
             ):
-                complete_message = self._stream_message(message.text, stored_message)
+                complete_message = await self._stream_message(message.text, stored_message)
                 stored_message.text = complete_message
                 stored_message = self._update_stored_message(stored_message)
             else:
                 # Only send message event for non-streaming messages
-                self._send_message_event(stored_message, id_=id_)
+                await self._send_message_event(stored_message, id_=id_)
         except Exception:
             # remove the message from the database
             delete_message(stored_message.id)
             raise
         self.status = stored_message
         return stored_message
+
+    def send_message(self, message: Message, id_: str | None = None):
+        return run_until_complete(self.asend_message(message, id_))
 
     def _store_message(self, message: Message) -> Message:
         flow_id = self.graph.flow_id if hasattr(self, "graph") else None
@@ -1051,7 +1054,7 @@ class Component(CustomComponent):
 
         return messages[0]
 
-    def _send_message_event(self, message: Message, id_: str | None = None, category: str | None = None) -> None:
+    async def _send_message_event(self, message: Message, id_: str | None = None, category: str | None = None) -> None:
         if hasattr(self, "_event_manager") and self._event_manager:
             data_dict = message.data.copy() if hasattr(message, "data") else message.model_dump()
             if id_ and not data_dict.get("id"):
@@ -1059,11 +1062,11 @@ class Component(CustomComponent):
             category = category or data_dict.get("category", None)
             match category:
                 case "error":
-                    self._event_manager.on_error(data=data_dict)
+                    await self._event_manager.on_error(data=data_dict)
                 case "remove_message":
-                    self._event_manager.on_remove_message(data={"id": data_dict["id"]})
+                    await self._event_manager.on_remove_message(data={"id": data_dict["id"]})
                 case _:
-                    self._event_manager.on_message(data=data_dict)
+                    await self._event_manager.on_message(data=data_dict)
 
     def _should_stream_message(self, stored_message: Message, original_message: Message) -> bool:
         return bool(
@@ -1081,7 +1084,7 @@ class Component(CustomComponent):
         message_table = message_tables[0]
         return Message(**message_table.model_dump())
 
-    def _stream_message(self, iterator: AsyncIterator | Iterator, message: Message) -> str:
+    async def _stream_message(self, iterator: AsyncIterator | Iterator, message: Message) -> str:
         if not isinstance(iterator, AsyncIterator | Iterator):
             msg = "The message must be an iterator or an async iterator."
             raise TypeError(msg)
@@ -1092,7 +1095,7 @@ class Component(CustomComponent):
             complete_message = ""
             first_chunk = True
             for chunk in iterator:
-                complete_message = self._process_chunk(
+                complete_message = await self._process_chunk(
                     chunk.content, complete_message, message.id, message, first_chunk=first_chunk
                 )
                 first_chunk = False
@@ -1105,13 +1108,13 @@ class Component(CustomComponent):
         complete_message = ""
         first_chunk = True
         async for chunk in iterator:
-            complete_message = self._process_chunk(
+            complete_message = await self._process_chunk(
                 chunk.content, complete_message, message_id, message, first_chunk=first_chunk
             )
             first_chunk = False
         return complete_message
 
-    def _process_chunk(
+    async def _process_chunk(
         self, chunk: str, complete_message: str, message_id: str, message: Message, *, first_chunk: bool = False
     ) -> str:
         complete_message += chunk
@@ -1120,7 +1123,7 @@ class Component(CustomComponent):
                 # Send the initial message only on the first chunk
                 msg_copy = message.model_copy()
                 msg_copy.text = complete_message
-                self._send_message_event(msg_copy, id_=message_id)
+                await self._send_message_event(msg_copy, id_=message_id)
             self._event_manager.on_token(
                 data={
                     "chunk": chunk,
@@ -1145,7 +1148,7 @@ class Component(CustomComponent):
             trace_name=trace_name,
             source=source,
         )
-        self.send_message(error_message)
+        self.asend_message(error_message)
         return error_message
 
     def _append_tool_to_outputs_map(self):
