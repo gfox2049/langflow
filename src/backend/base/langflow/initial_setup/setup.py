@@ -3,9 +3,9 @@ import copy
 import io
 import json
 import os
+import re
 import shutil
 import tempfile
-import uuid
 import zipfile
 from collections import defaultdict
 from copy import deepcopy
@@ -566,6 +566,35 @@ async def load_flows_from_directory() -> None:
             await upsert_flow_from_file(content, file_path.stem, session, user.id)
 
 
+async def detect_github_url(url: str) -> str:
+    if matched := re.match(r"https?://(?:www\.)?github\.com/([\w.-]+)/([\w.-]+)(?:\.git)?/?$", url):
+        owner, repo = matched.groups()
+
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(f"https://api.github.com/repos/{owner}/{repo}")
+            response.raise_for_status()
+            default_branch = response.json().get("default_branch")
+            return f"https://github.com/{owner}/{repo}/archive/refs/heads/{default_branch}.zip"
+
+    if matched := re.match(r"https?://(?:www\.)?github\.com/([\w.-]+)/([\w.-]+)/tree/([\w\\/.-]+)", url):
+        owner, repo, branch = matched.groups()
+        if branch[-1] == "/":
+            branch = branch[:-1]
+        return f"https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip"
+
+    if matched := re.match(r"https?://(?:www\.)?github\.com/([\w.-]+)/([\w.-]+)/releases/tag/([\w\\/.-]+)", url):
+        owner, repo, tag = matched.groups()
+        if tag[-1] == "/":
+            tag = tag[:-1]
+        return f"https://github.com/{owner}/{repo}/archive/refs/tags/{tag}.zip"
+
+    if matched := re.match(r"https?://(?:www\.)?github\.com/([\w.-]+)/([\w.-]+)/commit/(\w+)/?$", url):
+        owner, repo, commit = matched.groups()
+        return f"https://github.com/{owner}/{repo}/archive/{commit}.zip"
+
+    return url
+
+
 async def load_bundles_from_urls() -> tuple[list[tempfile.TemporaryDirectory], list[str]]:
     component_paths: set[str] = set()
     temp_dirs = []
@@ -584,8 +613,10 @@ async def load_bundles_from_urls() -> tuple[list[tempfile.TemporaryDirectory], l
         user_id = user.id
 
         for url in bundle_urls:
+            url_ = await detect_github_url(url)
+
             async with httpx.AsyncClient(follow_redirects=True) as client:
-                response = await client.get(url)
+                response = await client.get(url_)
                 response.raise_for_status()
 
             with zipfile.ZipFile(io.BytesIO(response.content)) as zfile:
@@ -672,8 +703,7 @@ async def find_existing_flow(session, flow_id, flow_endpoint_name):
             logger.debug(f"Found existing flow by endpoint name: {existing.name}")
             return existing
 
-    flow_id_uuid = uuid.UUID(flow_id)
-    stmt = select(Flow).where(Flow.id == flow_id_uuid)
+    stmt = select(Flow).where(Flow.id == flow_id)
     if existing := (await session.exec(stmt)).first():
         logger.debug(f"Found existing flow by id: {flow_id}")
         return existing
