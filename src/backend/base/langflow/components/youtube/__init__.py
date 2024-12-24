@@ -1,10 +1,10 @@
-from .channel import YouTubeChannel
-from .comments import YouTubeComments
-from .playlist import YouTubePlaylist
-from .search import YouTubeSearch
-from .transcripts import YouTubeTranscripts
-from .trending import YouTubeTrending
-from .video_details import YouTubeVideoDetails
+from .channel import YouTubeChannelComponent
+from .comments import YouTubeCommentsComponent
+from .playlist import YouTubePlaylistComponent
+from .search import YouTubeSearchComponent
+from .transcripts import YouTubeTranscriptsComponent
+from .trending import YouTubeTrendingComponent
+from .video_details import YouTubeVideoDetailsComponent
 
 __all__ = [
     "YouTubeChannel",

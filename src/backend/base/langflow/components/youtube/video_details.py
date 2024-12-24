@@ -61,6 +61,9 @@ class YouTubeVideoDetailsComponent(Component):
         Output(name="video_data", display_name="Video Data", method="get_video_details"),
     ]
 
+    API_FORBIDDEN = 403
+    VIDEO_NOT_FOUND = 404
+
     def _extract_video_id(self, video_url: str) -> str:
         """Extracts the video ID from a YouTube URL.
 
@@ -127,14 +130,12 @@ class YouTubeVideoDetailsComponent(Component):
         Returns:
             Dict: Formatted video quality information
         """
-        quality_info = {
+        return {
             "definition": content_details.get("definition", "unknown").upper(),
             "dimension": content_details.get("dimension", "2d"),
             "has_caption": content_details.get("caption", "false") == "true",
             "projection": content_details.get("projection", "rectangular"),
         }
-
-        return quality_info
 
     def get_video_details(self) -> Data:
         """Retrieves detailed information about a YouTube video.
@@ -221,9 +222,9 @@ class YouTubeVideoDetailsComponent(Component):
 
         except HttpError as e:
             error_message = f"YouTube API error: {e!s}"
-            if e.resp.status == 403:
+            if e.resp.status == self.API_FORBIDDEN:
                 error_message = "API quota exceeded or access forbidden."
-            elif e.resp.status == 404:
+            elif e.resp.status == self.VIDEO_NOT_FOUND:
                 error_message = "Video not found."
 
             error_data = {"error": error_message}

@@ -6,6 +6,9 @@ from langflow.inputs import BoolInput, DropdownInput, IntInput, SecretStrInput
 from langflow.schema import Data
 from langflow.template import Output
 
+HTTP_FORBIDDEN = 403
+HTTP_NOT_FOUND = 404
+MAX_API_RESULTS = 50
 
 class YouTubeTrendingComponent(Component):
     """A component that retrieves trending videos from YouTube."""
@@ -109,6 +112,8 @@ class YouTubeTrendingComponent(Component):
         Output(name="trending_videos", display_name="Trending Videos", method="get_trending_videos"),
     ]
 
+    max_results: int  # Define max_results as an instance variable
+
     def _format_duration(self, duration: str) -> str:
         """Formats ISO 8601 duration to readable format."""
         import re
@@ -145,10 +150,11 @@ class YouTubeTrendingComponent(Component):
         Returns:
             List[Data]: A list of Data objects containing trending video information
         """
+        error_message = ""  # Initialize error_message
         try:
             # Validate max_results
-            if not 1 <= self.max_results <= 50:
-                self.max_results = min(max(1, self.max_results), 50)
+            if not 1 <= self.max_results <= MAX_API_RESULTS:
+                self.max_results = min(max(1, self.max_results), MAX_API_RESULTS)
 
             # Build YouTube API client
             youtube = build("youtube", "v3", developerKey=self.api_key)
@@ -224,17 +230,12 @@ class YouTubeTrendingComponent(Component):
             return trending_videos
 
         except HttpError as e:
-            error_message = f"YouTube API error: {e!s}"
-            if e.resp.status == 403:
+            error_message = f"YouTube API error: {e}"
+            if e.resp.status == HTTP_FORBIDDEN:
                 error_message = "API quota exceeded or access forbidden."
-            elif e.resp.status == 404:
+            elif e.resp.status == HTTP_NOT_FOUND:
                 error_message = "Resource not found."
 
             error_data = [Data(data={"error": error_message})]
-            self.status = error_data
-            return error_data
-
-        except Exception as e:
-            error_data = [Data(data={"error": f"An error occurred: {e!s}"})]
             self.status = error_data
             return error_data

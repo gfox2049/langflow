@@ -1,3 +1,4 @@
+
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -7,6 +8,14 @@ from langflow.schema import Data
 from langflow.template import Output
 
 
+class YouTubeError(Exception):
+    """Base exception class for YouTube-related errors."""
+
+
+class YouTubeAPIError(YouTubeError):
+    """Exception raised for YouTube API-related errors."""
+
+
 class YouTubePlaylistComponent(Component):
     """A component that retrieves and analyzes YouTube playlists."""
 
@@ -14,6 +23,16 @@ class YouTubePlaylistComponent(Component):
     description: str = "Retrieves and analyzes YouTube playlist information and videos."
     icon: str = "YouTube"
     name = "YouTubePlaylist"
+
+    # Constants
+    PLAYLIST_ID_MIN_LENGTH = 12
+    MINUTES_SECONDS_PARTS = 2
+    HOURS_MINUTES_SECONDS_PARTS = 3
+    SECONDS_PER_MINUTE = 60
+    SECONDS_PER_HOUR = 3600
+    QUOTA_EXCEEDED_STATUS = 403
+    NOT_FOUND_STATUS = 404
+    MAX_RESULTS_PER_PAGE = 50
 
     inputs = [
         MessageTextInput(
@@ -72,7 +91,7 @@ class YouTubePlaylistComponent(Component):
         import re
 
         # If it's already a playlist ID
-        if playlist_url.startswith("PL") and len(playlist_url) > 12:
+        if playlist_url.startswith("PL") and len(playlist_url) > self.PLAYLIST_ID_MIN_LENGTH:
             return playlist_url
 
         # Regular expressions for different playlist URL formats
@@ -134,6 +153,28 @@ class YouTubePlaylistComponent(Component):
             return sorted(videos, key=lambda x: x.get("title", "").lower())
         return videos
 
+    def _calculate_total_duration(self, videos: list[dict]) -> str:
+        """Calculate total duration of all videos in the playlist."""
+        total_seconds = 0
+        for video in videos:
+            if "duration" in video:
+                parts = video["duration"].split(":")
+                if len(parts) == self.MINUTES_SECONDS_PARTS:  # MM:SS
+                    total_seconds += (
+                        int(parts[0]) * self.SECONDS_PER_MINUTE +
+                        int(parts[1])
+                    )
+                elif len(parts) == self.HOURS_MINUTES_SECONDS_PARTS:  # HH:MM:SS
+                    total_seconds += (
+                        int(parts[0]) * self.SECONDS_PER_HOUR +
+                        int(parts[1]) * self.SECONDS_PER_MINUTE +
+                        int(parts[2])
+                    )
+
+        hours = total_seconds // self.SECONDS_PER_HOUR
+        minutes = (total_seconds % self.SECONDS_PER_HOUR) // self.SECONDS_PER_MINUTE
+        return f"{hours}h {minutes}m"
+
     def get_playlist_info(self) -> Data:
         """Retrieves detailed information about a YouTube playlist and its videos.
 
@@ -149,11 +190,15 @@ class YouTubePlaylistComponent(Component):
 
             # Get playlist details
             playlist_response = (
-                youtube.playlists().list(part="snippet,status,contentDetails,player", id=playlist_id).execute()
+                youtube.playlists()
+                .list(part="snippet,status,contentDetails,player", id=playlist_id)
+                .execute()
             )
 
             if not playlist_response["items"]:
-                return Data(data={"error": "Playlist not found"})
+                error_data = {"error": "Playlist not found"}
+                self.status = error_data
+                return Data(data=error_data)
 
             playlist_info = playlist_response["items"][0]
 
@@ -172,119 +217,185 @@ class YouTubePlaylistComponent(Component):
             }
 
             # Get videos in playlist
-            videos = []
-            next_page_token = None
-            total_videos = 0
-
-            while total_videos < self.max_videos:
-                # Get playlist items
-                playlist_items = (
-                    youtube.playlistItems()
-                    .list(
-                        part="snippet,contentDetails",
-                        playlistId=playlist_id,
-                        maxResults=min(50, self.max_videos - total_videos),
-                        pageToken=next_page_token,
-                    )
-                    .execute()
-                )
-
-                if not playlist_items.get("items"):
-                    break
-
-                video_ids = [item["contentDetails"]["videoId"] for item in playlist_items["items"]]
-
-                # Get detailed video information if requested
-                if self.include_video_details:
-                    parts = ["snippet", "contentDetails"]
-                    if self.include_statistics:
-                        parts.append("statistics")
-
-                    video_response = youtube.videos().list(part=",".join(parts), id=",".join(video_ids)).execute()
-
-                    # Map video details to playlist items
-                    for playlist_item in playlist_items["items"]:
-                        video_id = playlist_item["contentDetails"]["videoId"]
-                        video_info = next((v for v in video_response.get("items", []) if v["id"] == video_id), None)
-
-                        if video_info:
-                            video_data = {
-                                "video_id": video_id,
-                                "title": video_info["snippet"]["title"],
-                                "description": video_info["snippet"]["description"],
-                                "position": playlist_item["snippet"]["position"],
-                                "published_at": video_info["snippet"]["publishedAt"],
-                                "thumbnails": video_info["snippet"]["thumbnails"],
-                                "url": f"https://www.youtube.com/watch?v={video_id}",
-                            }
-
-                            if "contentDetails" in video_info:
-                                video_data["duration"] = self._format_duration(video_info["contentDetails"]["duration"])
-
-                            if self.include_statistics and "statistics" in video_info:
-                                video_data["statistics"] = {
-                                    "view_count": int(video_info["statistics"].get("viewCount", 0)),
-                                    "like_count": int(video_info["statistics"].get("likeCount", 0)),
-                                    "comment_count": int(video_info["statistics"].get("commentCount", 0)),
-                                }
-
-                            videos.append(video_data)
-                else:
-                    # Basic video information from playlist items
-                    for item in playlist_items["items"]:
-                        video_data = {
-                            "video_id": item["contentDetails"]["videoId"],
-                            "title": item["snippet"]["title"],
-                            "description": item["snippet"]["description"],
-                            "position": item["snippet"]["position"],
-                            "published_at": item["snippet"]["publishedAt"],
-                            "thumbnails": item["snippet"]["thumbnails"],
-                            "url": f"https://www.youtube.com/watch?v={item['contentDetails']['videoId']}",
-                        }
-                        videos.append(video_data)
-
-                total_videos += len(playlist_items["items"])
-                next_page_token = playlist_items.get("nextPageToken")
-
-                if not next_page_token:
-                    break
+            playlist_data["videos"] = self._fetch_playlist_videos(youtube, playlist_id)
 
             # Sort videos based on specified order
-            videos = self._sort_videos(videos, self.sort_order)
-
-            # Add sorted videos to playlist data
-            playlist_data["videos"] = videos
+            playlist_data["videos"] = self._sort_videos(playlist_data["videos"], self.sort_order)
 
             # Calculate total duration if video details were requested
             if self.include_video_details:
-                total_seconds = 0
-                for video in videos:
-                    if "duration" in video:
-                        parts = video["duration"].split(":")
-                        if len(parts) == 2:  # MM:SS
-                            total_seconds += int(parts[0]) * 60 + int(parts[1])
-                        elif len(parts) == 3:  # HH:MM:SS
-                            total_seconds += int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-
-                hours = total_seconds // 3600
-                minutes = (total_seconds % 3600) // 60
-                playlist_data["total_duration"] = f"{hours}h {minutes}m"
+                playlist_data["total_duration"] = self._calculate_total_duration(playlist_data["videos"])
 
             self.status = playlist_data
             return Data(data=playlist_data)
 
         except HttpError as e:
-            error_message = f"YouTube API error: {e!s}"
-            if e.resp.status == 403:
+            if e.resp.status == self.QUOTA_EXCEEDED_STATUS:
                 error_message = "API quota exceeded or access forbidden."
-            elif e.resp.status == 404:
+            elif e.resp.status == self.NOT_FOUND_STATUS:
                 error_message = "Playlist not found."
+            else:
+                error_message = f"YouTube API error: {e!s}"
 
             error_data = {"error": error_message}
             self.status = error_data
             return Data(data=error_data)
 
-        except Exception as e:
-            error_data = {"error": f"An error occurred: {e!s}"}
+        except (ValueError, KeyError, AttributeError) as e:
+            error_msg = f"Error processing playlist data: {e!s}"
+            error_data = {"error": error_msg}
             self.status = error_data
             return Data(data=error_data)
+
+        except (ConnectionError, TimeoutError) as e:
+            error_msg = f"Network error: {e!s}"
+            error_data = {"error": error_msg}
+            self.status = error_data
+            return Data(data=error_data)
+
+    def _fetch_playlist_videos(self, youtube, playlist_id: str) -> list[dict]:
+        """Fetches videos from a playlist.
+
+        Args:
+            youtube: YouTube API client
+            playlist_id: ID of the playlist
+
+        Returns:
+            list[dict]: List of video information
+        """
+        videos = []
+        next_page_token = None
+        total_videos = 0
+
+        while total_videos < self.max_videos:
+            # Get playlist items
+            playlist_items = (
+                youtube.playlistItems()
+                .list(
+                    part="snippet,contentDetails",
+                    playlistId=playlist_id,
+                    maxResults=min(self.MAX_RESULTS_PER_PAGE, self.max_videos - total_videos),
+                    pageToken=next_page_token,
+                )
+                .execute()
+            )
+
+            if not playlist_items.get("items"):
+                break
+
+            video_ids = [item["contentDetails"]["videoId"] for item in playlist_items["items"]]
+
+            # Get detailed video information if requested
+            if self.include_video_details:
+                videos.extend(
+                    self._get_detailed_video_info(youtube, video_ids, playlist_items["items"])
+                )
+            else:
+                videos.extend(
+                    self._get_basic_video_info(playlist_items["items"])
+                )
+
+            total_videos += len(playlist_items["items"])
+            next_page_token = playlist_items.get("nextPageToken")
+
+            if not next_page_token:
+                break
+
+        return videos
+
+    def _get_detailed_video_info(self, youtube, video_ids: list[str], playlist_items: list[dict]) -> list[dict]:
+        """Gets detailed information for a list of videos.
+
+        Args:
+            youtube: YouTube API client
+            video_ids: List of video IDs
+            playlist_items: List of playlist items
+
+        Returns:
+            list[dict]: List of detailed video information
+        """
+        parts = ["snippet", "contentDetails"]
+        if self.include_statistics:
+            parts.append("statistics")
+
+        video_response = (
+            youtube.videos()
+            .list(part=",".join(parts), id=",".join(video_ids))
+            .execute()
+        )
+
+        videos = []
+        for playlist_item in playlist_items:
+            video_id = playlist_item["contentDetails"]["videoId"]
+            video_info = next(
+                (v for v in video_response.get("items", []) if v["id"] == video_id),
+                None
+            )
+
+            if video_info:
+                video_data = self._build_video_data(video_info, playlist_item, include_details=True)
+                videos.append(video_data)
+
+        return videos
+
+    def _get_basic_video_info(self, playlist_items: list[dict]) -> list[dict]:
+        """Gets basic information for playlist items.
+
+        Args:
+            playlist_items: List of playlist items
+
+        Returns:
+            list[dict]: List of basic video information
+        """
+        return [
+             self._build_video_data(None, item, include_details=False)
+            for item in playlist_items
+        ]
+
+    def _build_video_data(self, video_info: dict | None, playlist_item: dict, *, include_details: bool) -> dict:
+        """Builds video data dictionary.
+
+        Args:
+            video_info: Detailed video information (optional)
+            playlist_item: Basic playlist item information
+            include_details: Whether to include detailed information
+
+        Returns:
+            dict: Video data dictionary
+        """
+        video_id = playlist_item["contentDetails"]["videoId"]
+
+        if include_details and video_info:
+            video_data = {
+                "video_id": video_id,
+                "title": video_info["snippet"]["title"],
+                "description": video_info["snippet"]["description"],
+                "position": playlist_item["snippet"]["position"],
+                "published_at": video_info["snippet"]["publishedAt"],
+                "thumbnails": video_info["snippet"]["thumbnails"],
+                "url": f"https://www.youtube.com/watch?v={video_id}",
+            }
+
+            if "contentDetails" in video_info:
+                video_data["duration"] = self._format_duration(
+                    video_info["contentDetails"]["duration"]
+                )
+
+            if self.include_statistics and "statistics" in video_info:
+                video_data["statistics"] = {
+                    "view_count": int(video_info["statistics"].get("viewCount", 0)),
+                    "like_count": int(video_info["statistics"].get("likeCount", 0)),
+                    "comment_count": int(video_info["statistics"].get("commentCount", 0)),
+                }
+        else:
+            video_data = {
+                "video_id": video_id,
+                "title": playlist_item["snippet"]["title"],
+                "description": playlist_item["snippet"]["description"],
+                "position": playlist_item["snippet"]["position"],
+                "published_at": playlist_item["snippet"]["publishedAt"],
+                "thumbnails": playlist_item["snippet"]["thumbnails"],
+                "url": f"https://www.youtube.com/watch?v={video_id}",
+            }
+
+        return video_data

@@ -1,3 +1,6 @@
+from typing import Any
+from urllib.error import HTTPError
+
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -7,6 +10,14 @@ from langflow.schema import Data
 from langflow.template import Output
 
 
+class YouTubeError(Exception):
+    """Base exception class for YouTube-related errors."""
+
+
+class YouTubeAPIError(YouTubeError):
+    """Exception raised for YouTube API-related errors."""
+
+
 class YouTubeChannelComponent(Component):
     """A component that retrieves detailed information about YouTube channels."""
 
@@ -14,6 +25,12 @@ class YouTubeChannelComponent(Component):
     description: str = "Retrieves detailed information and statistics about YouTube channels."
     icon: str = "YouTube"
     name = "YouTubeChannel"
+
+    # Constants
+    CHANNEL_ID_LENGTH = 24
+    QUOTA_EXCEEDED_STATUS = 403
+    NOT_FOUND_STATUS = 404
+    MAX_PLAYLIST_RESULTS = 10
 
     inputs = [
         MessageTextInput(
@@ -66,7 +83,7 @@ class YouTubeChannelComponent(Component):
         import re
 
         # If it's already a channel ID (starts with UC)
-        if channel_url.startswith("UC") and len(channel_url) == 24:
+        if channel_url.startswith("UC") and len(channel_url) == self.CHANNEL_ID_LENGTH:
             return channel_url
 
         # Different URL patterns
@@ -97,6 +114,9 @@ class YouTubeChannelComponent(Component):
 
         Returns:
             str: The channel ID
+
+        Raises:
+            YouTubeError: If channel ID cannot be found or API error occurs
         """
         try:
             youtube = build("youtube", "v3", developerKey=self.api_key)
@@ -111,29 +131,40 @@ class YouTubeChannelComponent(Component):
 
             if response["items"]:
                 return response["items"][0]["id"]["channelId"]
-            raise ValueError(f"Could not find channel ID for: {channel_name}")
+
+            error_msg = f"Could not find channel ID for: {channel_name}"
+            raise YouTubeError(error_msg)
+
+        except (HttpError, HTTPError) as e:
+            error_msg = f"YouTube API error while getting channel ID: {e!s}"
+            raise YouTubeAPIError(error_msg) from e
+
+        except YouTubeError:
+            raise
 
         except Exception as e:
-            raise ValueError(f"Error getting channel ID: {e!s}")
+            error_msg = f"Unexpected error while getting channel ID: {e!s}"
+            raise YouTubeError(error_msg) from e
 
-    def _get_channel_playlists(self, youtube: any, channel_id: str, max_results: int = 10) -> list:
+    def _get_channel_playlists(self, youtube: Any, channel_id: str) -> list[dict[str, Any]]:
         """Gets the public playlists for a channel.
 
         Args:
             youtube: YouTube API client
             channel_id (str): The channel ID
-            max_results (int): Maximum number of playlists to return
 
         Returns:
-            list: List of playlist information
+            List[Dict[str, Any]]: List of playlist information
         """
         try:
             playlists_request = youtube.playlists().list(
-                part="snippet,contentDetails", channelId=channel_id, maxResults=max_results
+                part="snippet,contentDetails",
+                channelId=channel_id,
+                maxResults=self.MAX_PLAYLIST_RESULTS,
             )
             playlists_response = playlists_request.execute()
-
             playlists = []
+
             for item in playlists_response.get("items", []):
                 playlist_data = {
                     "title": item["snippet"]["title"],
@@ -145,10 +176,19 @@ class YouTubeChannelComponent(Component):
                 }
                 playlists.append(playlist_data)
 
-            return playlists
+        except (HttpError, HTTPError) as e:
+            error_msg = f"YouTube API error while fetching playlists: {e!s}"
+            return [{"error": error_msg}]
 
-        except Exception as e:
-            return [{"error": f"Error fetching playlists: {e!s}"}]
+        except (ValueError, KeyError, AttributeError) as e:
+            error_msg = f"Error processing playlist data: {e!s}"
+            return [{"error": error_msg}]
+
+        except (ConnectionError, TimeoutError) as e:
+            error_msg = f"Network error while fetching playlists: {e!s}"
+            return [{"error": error_msg}]
+
+        return playlists
 
     def get_channel_info(self) -> Data:
         """Retrieves detailed information about a YouTube channel.
@@ -174,60 +214,91 @@ class YouTubeChannelComponent(Component):
             channel_response = youtube.channels().list(part=",".join(parts), id=channel_id).execute()
 
             if not channel_response["items"]:
-                return Data(data={"error": "Channel not found"})
+                error_data = {"error": "Channel not found"}
+                self.status = error_data
+                return Data(data=error_data)
 
             channel_info = channel_response["items"][0]
-
-            # Build basic channel data
-            channel_data = {
-                "title": channel_info["snippet"]["title"],
-                "description": channel_info["snippet"]["description"],
-                "custom_url": channel_info["snippet"].get("customUrl", ""),
-                "published_at": channel_info["snippet"]["publishedAt"],
-                "thumbnails": {size: thumb["url"] for size, thumb in channel_info["snippet"]["thumbnails"].items()},
-                "country": channel_info["snippet"].get("country", "Not specified"),
-                "channel_id": channel_id,
-            }
-
-            # Add statistics if requested
-            if self.include_statistics:
-                stats = channel_info["statistics"]
-                channel_data["statistics"] = {
-                    "view_count": int(stats.get("viewCount", 0)),
-                    "subscriber_count": int(stats.get("subscriberCount", 0)),
-                    "hidden_subscriber_count": stats.get("hiddenSubscriberCount", False),
-                    "video_count": int(stats.get("videoCount", 0)),
-                }
-
-            # Add branding information if requested
-            if self.include_branding:
-                branding = channel_info.get("brandingSettings", {})
-                channel_data["branding"] = {
-                    "title": branding.get("channel", {}).get("title", ""),
-                    "description": branding.get("channel", {}).get("description", ""),
-                    "keywords": branding.get("channel", {}).get("keywords", ""),
-                    "banner_url": branding.get("image", {}).get("bannerExternalUrl", ""),
-                }
-
-            # Add playlists if requested
-            if self.include_playlists:
-                channel_data["playlists"] = self._get_channel_playlists(youtube, channel_id)
+            channel_data = self._build_channel_data(channel_info, channel_id)
 
             self.status = channel_data
             return Data(data=channel_data)
 
         except HttpError as e:
-            error_message = f"YouTube API error: {e!s}"
-            if e.resp.status == 403:
+            if e.resp.status == self.QUOTA_EXCEEDED_STATUS:
                 error_message = "API quota exceeded or access forbidden."
-            elif e.resp.status == 404:
+            elif e.resp.status == self.NOT_FOUND_STATUS:
                 error_message = "Channel not found."
+            else:
+                error_message = f"YouTube API error: {e!s}"
 
             error_data = {"error": error_message}
             self.status = error_data
             return Data(data=error_data)
 
-        except Exception as e:
-            error_data = {"error": f"An error occurred: {e!s}"}
+        except YouTubeError as e:
+            error_data = {"error": str(e)}
             self.status = error_data
             return Data(data=error_data)
+
+        except (ValueError, KeyError, AttributeError) as e:
+            error_msg = f"Error processing channel data: {e!s}"
+            error_data = {"error": error_msg}
+            self.status = error_data
+            return Data(data=error_data)
+
+        except (ConnectionError, TimeoutError) as e:
+            error_msg = f"Network error: {e!s}"
+            error_data = {"error": error_msg}
+            self.status = error_data
+            return Data(data=error_data)
+
+    def _build_channel_data(self, channel_info: dict[str, Any], channel_id: str) -> dict[str, Any]:
+        """Builds the channel data dictionary from the API response.
+
+        Args:
+            channel_info: Raw channel information from YouTube API
+            channel_id: The channel ID
+
+        Returns:
+            Dict[str, Any]: Structured channel data
+        """
+        # Build basic channel data
+        channel_data = {
+            "title": channel_info["snippet"]["title"],
+            "description": channel_info["snippet"]["description"],
+            "custom_url": channel_info["snippet"].get("customUrl", ""),
+            "published_at": channel_info["snippet"]["publishedAt"],
+            "thumbnails": {
+                size: thumb["url"] for size, thumb in channel_info["snippet"]["thumbnails"].items()
+            },
+            "country": channel_info["snippet"].get("country", "Not specified"),
+            "channel_id": channel_id,
+        }
+
+        # Add statistics if requested
+        if self.include_statistics:
+            stats = channel_info["statistics"]
+            channel_data["statistics"] = {
+                "view_count": int(stats.get("viewCount", 0)),
+                "subscriber_count": int(stats.get("subscriberCount", 0)),
+                "hidden_subscriber_count": stats.get("hiddenSubscriberCount", False),
+                "video_count": int(stats.get("videoCount", 0)),
+            }
+
+        # Add branding information if requested
+        if self.include_branding:
+            branding = channel_info.get("brandingSettings", {})
+            channel_data["branding"] = {
+                "title": branding.get("channel", {}).get("title", ""),
+                "description": branding.get("channel", {}).get("description", ""),
+                "keywords": branding.get("channel", {}).get("keywords", ""),
+                "banner_url": branding.get("image", {}).get("bannerExternalUrl", ""),
+            }
+
+        # Add playlists if requested
+        if self.include_playlists:
+            youtube = build("youtube", "v3", developerKey=self.api_key)
+            channel_data["playlists"] = self._get_channel_playlists(youtube, channel_id)
+
+        return channel_data

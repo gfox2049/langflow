@@ -3,7 +3,7 @@ from googleapiclient.errors import HttpError
 
 from langflow.custom import Component
 from langflow.inputs import IntInput, MessageTextInput, SecretStrInput
-from langflow.schema import Data
+from langflow.schema import Data, Message
 from langflow.template import Output
 
 
@@ -76,14 +76,20 @@ class YouTubeSearchComponent(Component):
                 )
                 video_data_list.append(video_data)
 
-            self.status = video_data_list
-            return video_data_list
+            if video_data_list:
+                self.status = video_data_list
+                return video_data_list
+            self.status = []
+            return []
 
         except HttpError as e:
             error_data = [Data(data={"error": f"An HTTP error occurred: {e}"})]
             self.status = error_data
             return error_data
-        except Exception as e:
-            error_data = [Data(data={"error": f"An error occurred: {e}"})]
+        except ValueError as e:
+            error_data = [Data(data={"error": f"A value error occurred: {e}"})]
             self.status = error_data
             return error_data
+        else:
+            self.status = []
+            return []
