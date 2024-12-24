@@ -228,6 +228,7 @@ class YouTubeTrendingComponent(Component):
                 trending_videos.append(Data(data=video_data))
 
             self.status = trending_videos
+        else:
             return trending_videos
 
         except HttpError as e:
