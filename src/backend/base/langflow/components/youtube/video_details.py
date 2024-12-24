@@ -1,3 +1,4 @@
+import googleapiclient
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -231,7 +232,13 @@ class YouTubeVideoDetailsComponent(Component):
             self.status = error_data
             return Data(data=error_data)
 
-        except Exception as e:
-            error_data = {"error": f"An error occurred: {e!s}"}
+        except googleapiclient.errors.HttpError as e:
+            error_message = f"YouTube API error: {e!s}"
+            if e.resp.status == self.API_FORBIDDEN:
+                error_message = "API quota exceeded or access forbidden."
+            elif e.resp.status == self.VIDEO_NOT_FOUND:
+                error_message = "Video not found."
+
+            error_data = {"error": error_message}
             self.status = error_data
             return Data(data=error_data)
