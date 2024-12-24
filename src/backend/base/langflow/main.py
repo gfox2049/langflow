@@ -20,6 +20,7 @@ from pydantic import PydanticDeprecatedSince20
 from pydantic_core import PydanticSerializationError
 from rich import print as rprint
 from starlette.middleware.base import BaseHTTPMiddleware
+from typing_extensions import override
 
 from langflow.api import health_check_router, log_router, router
 from langflow.initial_setup.setup import (
@@ -45,6 +46,7 @@ class RequestCancelledMiddleware(BaseHTTPMiddleware):
     def __init__(self, app) -> None:
         super().__init__(app)
 
+    @override
     async def dispatch(self, request: Request, call_next):
         sentinel = object()
 
@@ -68,6 +70,7 @@ class RequestCancelledMiddleware(BaseHTTPMiddleware):
 
 
 class JavaScriptMIMETypeMiddleware(BaseHTTPMiddleware):
+    @override
     async def dispatch(self, request: Request, call_next):
         try:
             response = await call_next(request)
