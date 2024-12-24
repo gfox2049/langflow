@@ -1,4 +1,3 @@
-
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -144,16 +143,17 @@ class YouTubeCommentsComponent(Component):
 
         # Add metrics if requested
         if include_metrics:
-            comment_data.update({
-                "like_count": comment["likeCount"],
-                "reply_count": item["snippet"]["totalReplyCount"],
-            })
+            comment_data.update(
+                {
+                    "like_count": comment["likeCount"],
+                    "reply_count": item["snippet"]["totalReplyCount"],
+                }
+            )
 
         # Add replies if requested
         if include_replies and item["snippet"]["totalReplyCount"] > 0 and "replies" in item:
             comment_data["replies"] = [
-                self._process_reply(reply, include_metrics)
-                for reply in item["replies"]["comments"]
+                self._process_reply(reply, include_metrics) for reply in item["replies"]["comments"]
             ]
 
         return comment_data
@@ -191,18 +191,13 @@ class YouTubeCommentsComponent(Component):
                         break
 
                     comment_data = self._process_comment(
-                        item,
-                        include_metrics=self.include_metrics,
-                        include_replies=self.include_replies
+                        item, include_metrics=self.include_metrics, include_replies=self.include_replies
                     )
                     comments_data.append(Data(data=comment_data))
                     results_count += 1
 
                 # Get the next page if available and needed
-                if (
-                    "nextPageToken" in response
-                    and results_count < self.max_results
-                ):
+                if "nextPageToken" in response and results_count < self.max_results:
                     request = youtube.commentThreads().list(
                         part="snippet,replies",
                         videoId=video_id,

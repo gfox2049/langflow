@@ -10,6 +10,7 @@ HTTP_FORBIDDEN = 403
 HTTP_NOT_FOUND = 404
 MAX_API_RESULTS = 50
 
+
 class YouTubeTrendingComponent(Component):
     """A component that retrieves trending videos from YouTube."""
 

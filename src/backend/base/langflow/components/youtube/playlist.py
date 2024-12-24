@@ -1,4 +1,3 @@
-
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -160,15 +159,10 @@ class YouTubePlaylistComponent(Component):
             if "duration" in video:
                 parts = video["duration"].split(":")
                 if len(parts) == self.MINUTES_SECONDS_PARTS:  # MM:SS
-                    total_seconds += (
-                        int(parts[0]) * self.SECONDS_PER_MINUTE +
-                        int(parts[1])
-                    )
+                    total_seconds += int(parts[0]) * self.SECONDS_PER_MINUTE + int(parts[1])
                 elif len(parts) == self.HOURS_MINUTES_SECONDS_PARTS:  # HH:MM:SS
                     total_seconds += (
-                        int(parts[0]) * self.SECONDS_PER_HOUR +
-                        int(parts[1]) * self.SECONDS_PER_MINUTE +
-                        int(parts[2])
+                        int(parts[0]) * self.SECONDS_PER_HOUR + int(parts[1]) * self.SECONDS_PER_MINUTE + int(parts[2])
                     )
 
         hours = total_seconds // self.SECONDS_PER_HOUR
@@ -190,9 +184,7 @@ class YouTubePlaylistComponent(Component):
 
             # Get playlist details
             playlist_response = (
-                youtube.playlists()
-                .list(part="snippet,status,contentDetails,player", id=playlist_id)
-                .execute()
+                youtube.playlists().list(part="snippet,status,contentDetails,player", id=playlist_id).execute()
             )
 
             if not playlist_response["items"]:
@@ -287,13 +279,9 @@ class YouTubePlaylistComponent(Component):
 
             # Get detailed video information if requested
             if self.include_video_details:
-                videos.extend(
-                    self._get_detailed_video_info(youtube, video_ids, playlist_items["items"])
-                )
+                videos.extend(self._get_detailed_video_info(youtube, video_ids, playlist_items["items"]))
             else:
-                videos.extend(
-                    self._get_basic_video_info(playlist_items["items"])
-                )
+                videos.extend(self._get_basic_video_info(playlist_items["items"]))
 
             total_videos += len(playlist_items["items"])
             next_page_token = playlist_items.get("nextPageToken")
@@ -318,19 +306,12 @@ class YouTubePlaylistComponent(Component):
         if self.include_statistics:
             parts.append("statistics")
 
-        video_response = (
-            youtube.videos()
-            .list(part=",".join(parts), id=",".join(video_ids))
-            .execute()
-        )
+        video_response = youtube.videos().list(part=",".join(parts), id=",".join(video_ids)).execute()
 
         videos = []
         for playlist_item in playlist_items:
             video_id = playlist_item["contentDetails"]["videoId"]
-            video_info = next(
-                (v for v in video_response.get("items", []) if v["id"] == video_id),
-                None
-            )
+            video_info = next((v for v in video_response.get("items", []) if v["id"] == video_id), None)
 
             if video_info:
                 video_data = self._build_video_data(video_info, playlist_item, include_details=True)
@@ -347,10 +328,7 @@ class YouTubePlaylistComponent(Component):
         Returns:
             list[dict]: List of basic video information
         """
-        return [
-             self._build_video_data(None, item, include_details=False)
-            for item in playlist_items
-        ]
+        return [self._build_video_data(None, item, include_details=False) for item in playlist_items]
 
     def _build_video_data(self, video_info: dict | None, playlist_item: dict, *, include_details: bool) -> dict:
         """Builds video data dictionary.
@@ -377,9 +355,7 @@ class YouTubePlaylistComponent(Component):
             }
 
             if "contentDetails" in video_info:
-                video_data["duration"] = self._format_duration(
-                    video_info["contentDetails"]["duration"]
-                )
+                video_data["duration"] = self._format_duration(video_info["contentDetails"]["duration"])
 
             if self.include_statistics and "statistics" in video_info:
                 video_data["statistics"] = {

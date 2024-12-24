@@ -269,9 +269,7 @@ class YouTubeChannelComponent(Component):
             "description": channel_info["snippet"]["description"],
             "custom_url": channel_info["snippet"].get("customUrl", ""),
             "published_at": channel_info["snippet"]["publishedAt"],
-            "thumbnails": {
-                size: thumb["url"] for size, thumb in channel_info["snippet"]["thumbnails"].items()
-            },
+            "thumbnails": {size: thumb["url"] for size, thumb in channel_info["snippet"]["thumbnails"].items()},
             "country": channel_info["snippet"].get("country", "Not specified"),
             "channel_id": channel_id,
         }
