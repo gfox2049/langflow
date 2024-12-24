@@ -7,11 +7,11 @@ from .trending import YouTubeTrendingComponent
 from .video_details import YouTubeVideoDetailsComponent
 
 __all__ = [
-    "YouTubeChannel",
-    "YouTubeComments",
-    "YouTubePlaylist",
-    "YouTubeSearch",
-    "YouTubeTranscripts",
-    "YouTubeTrending",
-    "YouTubeVideoDetails",
+    "YouTubeChannelComponent",
+    "YouTubeCommentsComponent",
+    "YouTubePlaylistComponent",
+    "YouTubeSearchComponent",
+    "YouTubeTranscriptsComponent",
+    "YouTubeTrendingComponent",
+    "YouTubeVideoDetailsComponent",
 ]
