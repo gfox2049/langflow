@@ -113,8 +113,6 @@ class YouTubeTrendingComponent(Component):
         Output(name="trending_videos", display_name="Trending Videos", method="get_trending_videos"),
     ]
 
-    max_results: int  # Define max_results as an instance variable
-
     def _format_duration(self, duration: str) -> str:
         """Formats ISO 8601 duration to readable format."""
         import re
@@ -151,7 +149,6 @@ class YouTubeTrendingComponent(Component):
         Returns:
             List[Data]: A list of Data objects containing trending video information
         """
-        error_message = ""  # Initialize error_message
         try:
             # Validate max_results
             if not 1 <= self.max_results <= MAX_API_RESULTS:
@@ -228,8 +225,6 @@ class YouTubeTrendingComponent(Component):
                 trending_videos.append(Data(data=video_data))
 
             self.status = trending_videos
-            return trending_videos
-
         except HttpError as e:
             error_message = f"YouTube API error: {e}"
             if e.resp.status == HTTP_FORBIDDEN:
@@ -240,3 +235,5 @@ class YouTubeTrendingComponent(Component):
             error_data = [Data(data={"error": error_message})]
             self.status = error_data
             return error_data
+        else:
+            return trending_videos
