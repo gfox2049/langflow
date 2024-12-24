@@ -113,6 +113,8 @@ class YouTubeTrendingComponent(Component):
         Output(name="trending_videos", display_name="Trending Videos", method="get_trending_videos"),
     ]
 
+    max_results: int
+
     def _format_duration(self, duration: str) -> str:
         """Formats ISO 8601 duration to readable format."""
         import re

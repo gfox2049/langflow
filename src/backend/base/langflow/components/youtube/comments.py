@@ -153,7 +153,7 @@ class YouTubeCommentsComponent(Component):
         # Add replies if requested
         if include_replies and item["snippet"]["totalReplyCount"] > 0 and "replies" in item:
             comment_data["replies"] = [
-                self._process_reply(reply, include_metrics) for reply in item["replies"]["comments"]
+                self._process_reply(reply, include_metrics=include_metrics) for reply in item["replies"]["comments"]
             ]
 
         return comment_data
